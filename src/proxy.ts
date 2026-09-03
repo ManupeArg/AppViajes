@@ -9,7 +9,7 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Todo salvo estáticos de Next e imágenes
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    // Todo salvo estáticos: Next, imágenes, iconos PWA, service worker, worker de MapLibre
+    "/((?!_next/static|_next/image|favicon.ico|icons/|maplibre/|sw.js|manifest.webmanifest|.*\.(?:svg|png|jpg|jpeg|gif|webp|ico|mjs)$).*)",
   ],
 };

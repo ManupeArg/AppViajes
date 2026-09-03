@@ -82,7 +82,12 @@ src/
     add-place-dialog.tsx              ← buscar → categoría → precio → notas → viaje
     trips-dialog.tsx
 public/sw.js                          ← service worker: cachea tiles y estáticos
+public/maplibre/                      ← worker de MapLibre (se copia solo en `npm install`, ver scripts/)
 ```
+
+> **Nota técnica:** Next 16 (Turbopack) resuelve mal la URL del web worker de MapLibre, y sin ese worker
+> el mapa vectorial queda vacío. Por eso `scripts/copy-maplibre-worker.mjs` copia el worker a `public/maplibre/`
+> en cada `npm install` y `place-map.tsx` llama a `setWorkerUrl("/maplibre/maplibre-gl-worker.mjs")`.
 
 ### Modelo de datos (resumen)
 

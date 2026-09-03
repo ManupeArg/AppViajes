@@ -31,6 +31,11 @@ function mapStyle(): string | maplibregl.StyleSpecification {
   };
 }
 
+// Next/Turbopack resuelve mal la URL del web worker de MapLibre (el que procesa los
+// tiles vectoriales), y sin worker el mapa queda vacío. Lo servimos desde /public.
+// Los archivos se copian ahí en `npm install` (scripts/copy-maplibre-worker.mjs).
+maplibregl.setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
+
 type PointProps = { id: string; category: PlaceOverview["category"]; color: string; wish: boolean };
 
 export function PlaceMap({ places, me, selectedId, onSelect }: Props) {
