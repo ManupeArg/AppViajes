@@ -12,12 +12,15 @@ export default async function HomePage() {
   const [{ data: places }, { data: profiles }, { data: trips }] = await Promise.all([
     supabase.from("places_overview").select("*").order("created_at", { ascending: false }),
     supabase.from("profiles").select("*").order("display_name"),
-    supabase.from("trips").select("*").order("created_at", { ascending: false }),
+    supabase.from("trips_overview").select("*").order("created_at", { ascending: false }),
   ]);
+
+  const meProfile = (profiles ?? []).find((p) => p.id === user!.id);
 
   return (
     <AppShell
       me={user!.id}
+      isAdmin={meProfile?.is_admin ?? false}
       places={places ?? []}
       profiles={profiles ?? []}
       trips={trips ?? []}

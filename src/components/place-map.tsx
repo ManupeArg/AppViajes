@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
 import Supercluster from "supercluster";
 import type { PlaceOverview } from "@/lib/types";
-import { CATEGORIES } from "@/lib/types";
+import { CATEGORIES, mainCategory } from "@/lib/types";
 
 interface Props {
   places: PlaceOverview[];
@@ -36,7 +36,7 @@ function mapStyle(): string | maplibregl.StyleSpecification {
 // Los archivos se copian ahí en `npm install` (scripts/copy-maplibre-worker.mjs).
 maplibregl.setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
 
-type PointProps = { id: string; category: PlaceOverview["category"]; color: string; wish: boolean };
+type PointProps = { id: string; category: PlaceOverview["categories"][number]; color: string; wish: boolean };
 
 export function PlaceMap({ places, me, selectedId, onSelect }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -86,7 +86,7 @@ export function PlaceMap({ places, me, selectedId, onSelect }: Props) {
         geometry: { type: "Point", coordinates: [p.lng, p.lat] },
         properties: {
           id: p.id,
-          category: p.category,
+          category: mainCategory(p.categories),
           color: p.created_by_color,
           wish: !p.visitor_ids.length && p.wishlist_ids.includes(me),
         },

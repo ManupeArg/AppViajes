@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { InvitesPanel } from "./invites-panel";
@@ -7,6 +8,8 @@ export const dynamic = "force-dynamic";
 
 export default async function InvitesPage() {
   const supabase = await createClient();
+  const { data: isAdmin } = await supabase.rpc("is_admin");
+  if (!isAdmin) redirect("/feed");
   const { data: invites } = await supabase.from("invites").select("*").order("created_at", { ascending: false });
 
   return (

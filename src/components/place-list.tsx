@@ -1,7 +1,7 @@
 "use client";
 
 import type { PlaceOverview, Profile } from "@/lib/types";
-import { CATEGORIES, PRICE_LABELS } from "@/lib/types";
+import { CATEGORIES, PRICE_LABELS, mainCategory } from "@/lib/types";
 import { Avatars } from "./avatars";
 
 interface Props {
@@ -19,7 +19,8 @@ export function PlaceList({ places, profiles, me, onSelect }: Props) {
   return (
     <ul className="mx-auto max-w-3xl divide-y divide-zinc-200 overflow-y-auto dark:divide-zinc-800">
       {places.map((p) => {
-        const cat = CATEGORIES[p.category];
+        const cat = CATEGORIES[mainCategory(p.categories)];
+        const catLabels = p.categories.map((c) => CATEGORIES[c].label).join(" · ") || cat.label;
         const visited = p.visitor_ids.includes(me);
         const wished = p.wishlist_ids.includes(me);
         return (
@@ -38,7 +39,7 @@ export function PlaceList({ places, profiles, me, onSelect }: Props) {
                   {wished && !visited && <span title="Quiero ir">⭐</span>}
                 </div>
                 <div className="truncate text-sm text-zinc-500">
-                  {[p.city, p.country].filter(Boolean).join(", ")} · {cat.label}
+                  {[p.city, p.country].filter(Boolean).join(", ")} · {catLabels}
                   {p.price_level ? ` · ${PRICE_LABELS[p.price_level]}` : ""}
                 </div>
                 <div className="mt-1 flex items-center gap-2 text-xs text-zinc-500">

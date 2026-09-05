@@ -13,7 +13,8 @@ Web privada para un grupo de amigos: mapa mundial de lugares (comida, bebida, s�
 1. Creá un proyecto en [supabase.com](https://supabase.com) (plan gratis alcanza).
 2. **SQL Editor → New query**, pegá el contenido de `supabase/migrations/0001_schema.sql` y ejecutalo. Crea todas las tablas, políticas RLS, funciones y el bucket de fotos.
 3. **Authentication → Providers:**
-   - **Email:** dejalo habilitado. Para que funcione con magic link, desactivá "Confirm email" o dejalo, ambos funcionan.
+   - **Email:** dejalo habilitado y **desactivá "Confirm email"** (así el amigo crea la cuenta con email + contraseña + código y entra en el momento, sin pasar por el mail). Si lo dejás activado también funciona, pero tiene que confirmar el mail antes de entrar.
+   - En *Auth → Settings*, "Minimum password length" puede quedar en 6, que es el mínimo que permite Supabase.
    - **Google:** habilitalo. Necesitás un OAuth Client ID de Google Cloud Console (tipo "Web application"). En *Authorized redirect URIs* poné la URL que te muestra Supabase (`https://<ref>.supabase.co/auth/v1/callback`).
 4. **Authentication → URL Configuration:**
    - *Site URL:* `http://localhost:3000` (después la cambiás por tu dominio de Vercel).
@@ -32,7 +33,13 @@ Abrí http://localhost:3000, entrá con Google o con tu email. **El primer usuar
 
 ### 3. Invitar amigos
 
-Desde la app: ícono de actividad → *Invitar amigos* → *Generar link*. Te da un link tipo `https://tu-app/invite/3fa9c1b27e04` que mandás por WhatsApp. Quien lo abre se loguea (Google o email) y queda adentro. Cada código sirve 1 vez por defecto (podés elegir 3, 5 o 10) y vence a los 7 días.
+Desde la app: ícono de actividad → *Invitar amigos* → *Generar link*. Te da un link tipo `https://tu-app/invite/3fa9c1b27e04` que mandás por WhatsApp. Cada código sirve 1 vez por defecto (podés elegir 3, 5 o 10) y vence a los 7 días.
+
+Quien lo abre cae en el login con el código precargado y tiene dos caminos:
+- **Email + contraseña + código** → se crea la cuenta y entra.
+- **Google** → entra y después le pide el código.
+
+Las siguientes veces: Google directo, o email + contraseña con el código vacío.
 
 ### 4. Deploy en Vercel
 

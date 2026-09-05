@@ -3,14 +3,15 @@
 import { useMemo, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Map as MapIcon, List, Plus, Activity, Plane } from "lucide-react";
-import type { PlaceOverview, Profile, Trip } from "@/lib/types";
+import { Map as MapIcon, List, Plus, Activity, Plane, LogOut } from "lucide-react";
+import type { PlaceOverview, Profile, TripOverview } from "@/lib/types";
 import { applyFilters, filtersFromParams, filtersToParams, type Filters } from "@/lib/filters";
 import { FilterBar } from "./filter-bar";
 import { PlaceList } from "./place-list";
 import { PlaceSheet } from "./place-sheet";
 import { AddPlaceDialog } from "./add-place-dialog";
 import { TripsDialog } from "./trips-dialog";
+import { Avatar } from "./avatars";
 
 // MapLibre necesita window: se carga solo en el cliente.
 const PlaceMap = dynamic(() => import("./place-map").then((m) => m.PlaceMap), {
@@ -20,12 +21,13 @@ const PlaceMap = dynamic(() => import("./place-map").then((m) => m.PlaceMap), {
 
 interface Props {
   me: string;
+  isAdmin: boolean;
   places: PlaceOverview[];
   profiles: Profile[];
-  trips: Trip[];
+  trips: TripOverview[];
 }
 
-export function AppShell({ me, places, profiles, trips }: Props) {
+export function AppShell({ me, isAdmin, places, profiles, trips }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const filters = useMemo(() => filtersFromParams(new URLSearchParams(searchParams.toString())), [searchParams]);
@@ -39,6 +41,7 @@ export function AppShell({ me, places, profiles, trips }: Props) {
   const filtered = useMemo(() => applyFilters(places, filters, me), [places, filters, me]);
   const selected = places.find((p) => p.id === selectedId) ?? null;
   const activeTrip = trips.find((t) => t.id === filters.trip) ?? null;
+  const meProfile = profiles.find((p) => p.id === me);
 
   const setFilters = useCallback(
     (next: Filters) => {
@@ -66,7 +69,7 @@ export function AppShell({ me, places, profiles, trips }: Props) {
             className="ml-1 max-w-[45vw] truncate rounded-full bg-zinc-900 px-3 py-1 text-xs text-white sm:max-w-none dark:bg-white dark:text-zinc-900"
             title="Quitar filtro de viaje"
           >
-            {activeTrip.emoji} {activeTrip.name} ✕
+            {activeTrip.emoji} {activeTrip.name}{!activeTrip.is_public && " 🔒"} ✕
           </button>
         )}
         <div className="ml-auto flex items-center gap-1">
@@ -98,6 +101,12 @@ export function AppShell({ me, places, profiles, trips }: Props) {
           >
             <Plus size={16} /> <span className="hidden sm:inline">Agregar</span>
           </button>
+          <form action="/auth/signout" method="post" className="ml-1 flex items-center gap-1 border-l border-zinc-200 pl-2 dark:border-zinc-700">
+            {meProfile && <Avatar profile={meProfile} size={26} />}
+            <button type="submit" className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 hover:text-red-600 dark:hover:bg-zinc-800" aria-label="Cerrar sesión" title={`Salir${isAdmin ? " (admin)" : ""}`}>
+              <LogOut size={16} />
+            </button>
+          </form>
         </div>
       </header>
 
@@ -119,6 +128,7 @@ export function AppShell({ me, places, profiles, trips }: Props) {
       {showTrips && (
         <TripsDialog
           trips={trips}
+          profiles={profiles}
           me={me}
           activeTripId={filters.trip}
           onSelect={(id) => { setFilters({ ...filters, trip: id }); setShowTrips(false); }}

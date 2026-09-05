@@ -17,7 +17,7 @@ export interface PlaceResult {
   price_level: number | null;
   google_place_id: string | null;
   website: string | null;
-  category: PlaceCategory;
+  categories: PlaceCategory[];
 }
 
 const GOOGLE_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY;
@@ -57,7 +57,10 @@ async function searchGoogle(query: string, near?: { lat: number; lng: number }):
       ...(near ? { locationBias: { circle: { center: { latitude: near.lat, longitude: near.lng }, radius: 50000 } } } : {}),
     }),
   });
-  if (!res.ok) throw new Error(`Google Places: ${res.status}`);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+    throw new Error(`Google Places (${res.status}): ${body.error?.message ?? "revisá que la Places API (New) esté habilitada, la facturación activa y la key permitida para este dominio"}`);
+  }
   const json = (await res.json()) as { places?: GPlace[] };
 
   return (json.places ?? []).map((p) => {
@@ -73,7 +76,7 @@ async function searchGoogle(query: string, near?: { lat: number; lng: number }):
       price_level: googlePrice(p.priceLevel),
       google_place_id: p.id,
       website: p.websiteUri ?? null,
-      category: guessCategory(p.types ?? []),
+      categories: [guessCategory(p.types ?? [])],
     };
   });
 }
@@ -132,6 +135,6 @@ async function searchNominatim(query: string): Promise<PlaceResult[]> {
     price_level: null,
     google_place_id: null,
     website: null,
-    category: guessCategory([r.type ?? "", r.class ?? ""]),
+    categories: [guessCategory([r.type ?? "", r.class ?? ""])],
   }));
 }

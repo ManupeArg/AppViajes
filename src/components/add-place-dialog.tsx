@@ -5,12 +5,12 @@ import { useRouter } from "next/navigation";
 import { X, Search, MapPin } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { searchPlaces, type PlaceResult } from "@/lib/places-search";
-import type { PlaceCategory, Trip } from "@/lib/types";
+import type { PlaceCategory, TripOverview } from "@/lib/types";
 import { CATEGORIES, PRICE_LABELS } from "@/lib/types";
 
 interface Props {
   me: string;
-  trips: Trip[];
+  trips: TripOverview[];
   defaultTripId?: string;
   onClose: () => void;
 }
@@ -22,7 +22,7 @@ export function AddPlaceDialog({ me, trips, defaultTripId = "", onClose }: Props
   const [results, setResults] = useState<PlaceResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [picked, setPicked] = useState<PlaceResult | null>(null);
-  const [category, setCategory] = useState<PlaceCategory>("otro");
+  const [categories, setCategories] = useState<PlaceCategory[]>([]);
   const [price, setPrice] = useState<number>(0);
   const [notes, setNotes] = useState("");
   const [tags, setTags] = useState("");
@@ -37,6 +37,7 @@ export function AddPlaceDialog({ me, trips, defaultTripId = "", onClose }: Props
     setQuery(value);
     if (debounce.current) clearTimeout(debounce.current);
     if (value.trim().length < 3) { setResults([]); return; }
+    setError(null);
     debounce.current = setTimeout(async () => {
       setSearching(true);
       try {
@@ -51,7 +52,7 @@ export function AddPlaceDialog({ me, trips, defaultTripId = "", onClose }: Props
 
   function pick(r: PlaceResult) {
     setPicked(r);
-    setCategory(r.category);
+    setCategories(r.categories);
     setPrice(r.price_level ?? 0);
     setResults([]);
   }
@@ -66,7 +67,7 @@ export function AddPlaceDialog({ me, trips, defaultTripId = "", onClose }: Props
       .from("places")
       .insert({
         name: picked.name,
-        category,
+        categories: categories.length ? categories : ["otro"],
         lat: picked.lat,
         lng: picked.lng,
         address: picked.address,
@@ -115,11 +116,15 @@ export function AddPlaceDialog({ me, trips, defaultTripId = "", onClose }: Props
               <input autoFocus value={query} onChange={(e) => onQueryChange(e.target.value)} placeholder="Nombre del lugar, ej. Ichiran Shibuya" className={`${input} pl-9`} />
             </div>
             {searching && <p className="text-xs text-zinc-500">Buscando…</p>}
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            {!searching && !error && query.trim().length >= 3 && results.length === 0 && (
+              <p className="text-xs text-zinc-500">Sin resultados. Probá con el nombre y la ciudad, ej. “Don Julio Buenos Aires”.</p>
+            )}
             <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
               {results.map((r, i) => (
                 <li key={r.google_place_id ?? i}>
                   <button onClick={() => pick(r)} className="flex w-full items-start gap-2 py-2 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800">
-                    <span className="mt-0.5 text-lg">{CATEGORIES[r.category].emoji}</span>
+                    <span className="mt-0.5 text-lg">{CATEGORIES[r.categories[0] ?? "otro"].emoji}</span>
                     <span className="min-w-0">
                       <span className="block truncate font-medium">{r.name}</span>
                       <span className="block truncate text-xs text-zinc-500">{r.address}</span>
@@ -144,14 +149,14 @@ export function AddPlaceDialog({ me, trips, defaultTripId = "", onClose }: Props
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-zinc-500">Categoría</label>
+              <label className="mb-1 block text-xs font-medium text-zinc-500">Categorías <span className="font-normal">(podés elegir varias; la primera es la del ícono)</span></label>
               <div className="flex flex-wrap gap-1.5">
                 {(Object.keys(CATEGORIES) as PlaceCategory[]).map((k) => (
                   <button
                     type="button"
                     key={k}
-                    onClick={() => setCategory(k)}
-                    className={`rounded-full border px-2.5 py-1 text-sm ${category === k ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-900" : "border-zinc-200 dark:border-zinc-700"}`}
+                    onClick={() => setCategories((c) => (c.includes(k) ? c.filter((x) => x !== k) : [...c, k]))}
+                    className={`rounded-full border px-2.5 py-1 text-sm ${categories.includes(k) ? "border-zinc-900 bg-zinc-900 text-white dark:border-white dark:bg-white dark:text-zinc-900" : "border-zinc-200 dark:border-zinc-700"}`}
                   >
                     {CATEGORIES[k].emoji} {CATEGORIES[k].label}
                   </button>
@@ -176,8 +181,11 @@ export function AddPlaceDialog({ me, trips, defaultTripId = "", onClose }: Props
             {trips.length > 0 && (
               <select value={tripId} onChange={(e) => setTripId(e.target.value)} className={input}>
                 <option value="">Sin viaje</option>
-                {trips.map((t) => <option key={t.id} value={t.id}>{t.emoji} {t.name}</option>)}
+                {trips.map((t) => <option key={t.id} value={t.id}>{t.emoji} {t.name}{t.is_public ? "" : " 🔒"}</option>)}
               </select>
+            )}
+            {tripId && trips.find((t) => t.id === tripId)?.is_public === false && (
+              <p className="-mt-1 text-xs text-amber-700 dark:text-amber-400">🔒 Viaje privado: este lugar solo lo van a ver los miembros del viaje hasta que se haga público.</p>
             )}
 
             <label className="flex items-center gap-2 text-sm">

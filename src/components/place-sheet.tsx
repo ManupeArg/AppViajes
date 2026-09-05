@@ -4,15 +4,15 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { X, Navigation, Share2, Star, Trash2, Plane } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import type { PlaceOverview, Profile, Trip, Visit } from "@/lib/types";
-import { CATEGORIES, PRICE_LABELS } from "@/lib/types";
+import type { PlaceOverview, Profile, TripOverview, Visit } from "@/lib/types";
+import { CATEGORIES, PRICE_LABELS, mainCategory } from "@/lib/types";
 import { Avatar, Avatars } from "./avatars";
 import { VisitForm } from "./visit-form";
 
 interface Props {
   place: PlaceOverview;
   profiles: Profile[];
-  trips: Trip[];
+  trips: TripOverview[];
   me: string;
   onClose: () => void;
 }
@@ -20,12 +20,18 @@ interface Props {
 export function PlaceSheet({ place, profiles, trips, me, onClose }: Props) {
   const supabase = createClient();
   const router = useRouter();
-  const [pending, start] = useTransition();
+  const [, start] = useTransition();
   const [visits, setVisits] = useState<Visit[]>([]);
   const [showVisitForm, setShowVisitForm] = useState(false);
-  const cat = CATEGORIES[place.category];
+  const [actionError, setActionError] = useState<string | null>(null);
+  const cat = CATEGORIES[mainCategory(place.categories)];
+  const catLabels = place.categories.map((c) => `${CATEGORIES[c].emoji} ${CATEGORIES[c].label}`).join(" · ") || cat.label;
   const visited = place.visitor_ids.includes(me);
-  const wished = place.wishlist_ids.includes(me);
+  // "Quiero ir" optimista: el botón cambia al instante; cuando el servidor confirma
+  // (y el valor real cambia), el override deja de aplicar solo.
+  const serverWished = place.wishlist_ids.includes(me);
+  const [wishOverride, setWishOverride] = useState<{ base: boolean; value: boolean } | null>(null);
+  const wished = wishOverride && wishOverride.base === serverWished ? wishOverride.value : serverWished;
   const myVisit = visits.find((v) => v.user_id === me);
 
   useEffect(() => {
@@ -40,15 +46,33 @@ export function PlaceSheet({ place, profiles, trips, me, onClose }: Props) {
   const refresh = () => start(() => router.refresh());
 
   async function toggleWishlist() {
-    if (wished) await supabase.from("wishlist").delete().match({ place_id: place.id, user_id: me });
-    else await supabase.from("wishlist").insert({ place_id: place.id, user_id: me });
+    const next = !wished;
+    setWishOverride({ base: serverWished, value: next });
+    setActionError(null);
+    const { error } = next
+      ? await supabase.from("wishlist").insert({ place_id: place.id, user_id: me })
+      : await supabase.from("wishlist").delete().match({ place_id: place.id, user_id: me });
+    if (error) {
+      setWishOverride(null);
+      setActionError(error.message);
+      return;
+    }
     refresh();
   }
 
   async function addToTrip(tripId: string) {
     if (!tripId) return;
-    await supabase.from("trip_places").upsert({ trip_id: tripId, place_id: place.id, added_by: me });
-    refresh();
+    setActionError(null);
+    const { error } = await supabase.from("trip_places").upsert({ trip_id: tripId, place_id: place.id, added_by: me });
+    if (error) setActionError(error.message);
+    else refresh();
+  }
+
+  async function removeFromTrip(tripId: string) {
+    setActionError(null);
+    const { error } = await supabase.from("trip_places").delete().match({ trip_id: tripId, place_id: place.id });
+    if (error) setActionError(error.message);
+    else refresh();
   }
 
   async function removePlace() {
@@ -82,7 +106,7 @@ export function PlaceSheet({ place, profiles, trips, me, onClose }: Props) {
             {[place.address ?? place.city, place.country].filter(Boolean).join(", ")}
           </p>
           <p className="text-sm text-zinc-500">
-            {cat.label}{place.price_level ? ` · ${PRICE_LABELS[place.price_level]}` : ""}
+            {catLabels}{place.price_level ? ` · ${PRICE_LABELS[place.price_level]}` : ""}
             {place.avg_rating != null && <> · <b className="text-zinc-900 dark:text-zinc-100">★ {place.avg_rating}</b></>}
           </p>
         </div>
@@ -105,12 +129,12 @@ export function PlaceSheet({ place, profiles, trips, me, onClose }: Props) {
           </button>
           <button
             onClick={toggleWishlist}
-            disabled={pending}
             className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium ${wished ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300" : "border border-zinc-200 dark:border-zinc-700"}`}
           >
-            <Star size={16} fill={wished ? "currentColor" : "none"} /> {wished ? "Quiero ir" : "Quiero ir"}
+            <Star size={16} fill={wished ? "currentColor" : "none"} /> {wished ? "Quiero ir ✓" : "Quiero ir"}
           </button>
         </div>
+        {actionError && <p className="text-sm text-red-600">{actionError}</p>}
 
         {showVisitForm && (
           <VisitForm placeId={place.id} me={me} existing={myVisit} onDone={() => { setShowVisitForm(false); refresh(); supabase.from("visits").select("*").eq("place_id", place.id).order("visited_on", { ascending: false }).then(({ data }) => setVisits(data ?? [])); }} />
@@ -145,10 +169,19 @@ export function PlaceSheet({ place, profiles, trips, me, onClose }: Props) {
         )}
 
         <section className="space-y-2">
-          <div className="flex items-center gap-2 text-sm">
-            <Plane size={14} className="text-zinc-500" />
+          <div className="flex items-start gap-2 text-sm">
+            <Plane size={14} className="mt-1 text-zinc-500" />
             {place.trip_ids.length > 0 ? (
-              <span>{trips.filter((t) => place.trip_ids.includes(t.id)).map((t) => `${t.emoji} ${t.name}`).join(", ")}</span>
+              <ul className="flex flex-wrap gap-1.5">
+                {trips.filter((t) => place.trip_ids.includes(t.id)).map((t) => (
+                  <li key={t.id} className="flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 dark:bg-zinc-800">
+                    {t.emoji} {t.name}{!t.is_public && " 🔒"}
+                    {(t.created_by === me || place.created_by === me) && (
+                      <button onClick={() => removeFromTrip(t.id)} className="ml-0.5 text-zinc-400 hover:text-red-600" title="Quitar de este viaje">✕</button>
+                    )}
+                  </li>
+                ))}
+              </ul>
             ) : (
               <span className="text-zinc-500">En ningún viaje</span>
             )}
@@ -156,7 +189,7 @@ export function PlaceSheet({ place, profiles, trips, me, onClose }: Props) {
           {trips.some((t) => !place.trip_ids.includes(t.id)) && (
             <select onChange={(e) => addToTrip(e.target.value)} value="" className="w-full rounded-lg border border-zinc-200 bg-transparent px-2 py-1.5 text-sm dark:border-zinc-700">
               <option value="">+ Agregar a un viaje…</option>
-              {trips.filter((t) => !place.trip_ids.includes(t.id)).map((t) => <option key={t.id} value={t.id}>{t.emoji} {t.name}</option>)}
+              {trips.filter((t) => !place.trip_ids.includes(t.id)).map((t) => <option key={t.id} value={t.id}>{t.emoji} {t.name}{t.is_public ? "" : " 🔒"}</option>)}
             </select>
           )}
         </section>

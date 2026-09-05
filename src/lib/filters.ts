@@ -59,7 +59,7 @@ export function applyFilters(places: PlaceOverview[], f: Filters, me: string): P
     if (q && !`${p.name} ${p.city ?? ""} ${p.country ?? ""} ${p.notes ?? ""} ${p.tags.join(" ")}`.toLowerCase().includes(q)) return false;
     if (f.country && p.country !== f.country) return false;
     if (f.city && p.city !== f.city) return false;
-    if (f.category && p.category !== f.category) return false;
+    if (f.category && !p.categories.includes(f.category)) return false;
     if (f.minRating && (p.avg_rating ?? 0) < f.minRating) return false;
     if (f.maxPrice && (p.price_level ?? 0) > f.maxPrice) return false;
     if (f.user && p.created_by !== f.user) return false;

@@ -15,7 +15,7 @@ export type PlaceCategory =
   | "transporte"
   | "otro";
 
-export type ActivityKind = "place_added" | "visit" | "wishlist" | "comment" | "photo";
+export type ActivityKind = "place_added" | "visit" | "wishlist" | "comment" | "photo" | "trip_created" | "trip_place_added";
 
 type Timestamps = { created_at: string };
 
@@ -24,6 +24,7 @@ export type Profile = Timestamps & {
   display_name: string;
   avatar_url: string | null;
   color: string;
+  is_admin: boolean;
 }
 
 export type Trip = Timestamps & {
@@ -33,13 +34,21 @@ export type Trip = Timestamps & {
   starts_on: string | null;
   ends_on: string | null;
   emoji: string | null;
+  is_public: boolean;
   created_by: string;
 }
+
+export type TripOverview = Trip & {
+  member_ids: string[];
+  places_count: number;
+};
+
+export type TripMember = { trip_id: string; user_id: string; added_by: string | null; added_at: string };
 
 export type Place = Timestamps & {
   id: string;
   name: string;
-  category: PlaceCategory;
+  categories: PlaceCategory[];
   lat: number;
   lng: number;
   address: string | null;
@@ -114,6 +123,7 @@ export type Activity = Timestamps & {
   visit_id: string | null;
   comment_id: string | null;
   photo_id: string | null;
+  trip_id: string | null;
 }
 
 export type TripPlace = { trip_id: string; place_id: string; added_by: string; added_at: string };
@@ -132,8 +142,9 @@ type Optional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 export type Database = {
   public: {
     Tables: {
-      profiles: { Row: Profile; Insert: Optional<Profile, "created_at" | "avatar_url" | "color">; Update: Partial<Profile>; Relationships: [] };
-      trips: { Row: Trip; Insert: Optional<Trip, "id" | "created_at" | "description" | "starts_on" | "ends_on" | "emoji">; Update: Partial<Trip>; Relationships: [] };
+      profiles: { Row: Profile; Insert: Optional<Profile, "created_at" | "avatar_url" | "color" | "is_admin">; Update: Partial<Profile>; Relationships: [] };
+      trips: { Row: Trip; Insert: Optional<Trip, "id" | "created_at" | "description" | "starts_on" | "ends_on" | "emoji" | "is_public">; Update: Partial<Trip>; Relationships: [] };
+      trip_members: { Row: TripMember; Insert: Optional<TripMember, "added_by" | "added_at">; Update: Partial<TripMember>; Relationships: [] };
       places: { Row: Place; Insert: Optional<Place, "id" | "created_at" | "updated_at" | "address" | "city" | "country" | "country_code" | "price_level" | "google_place_id" | "website" | "notes" | "tags">; Update: Partial<Place>; Relationships: [] };
       trip_places: { Row: TripPlace; Insert: Optional<TripPlace, "added_at">; Update: Partial<TripPlace>; Relationships: [] };
       visits: { Row: Visit; Insert: Optional<Visit, "id" | "created_at" | "updated_at" | "visited_on" | "rating" | "review" | "price_paid" | "currency">; Update: Partial<Visit>; Relationships: [] };
@@ -146,11 +157,15 @@ export type Database = {
     };
     Views: {
       places_overview: { Row: PlaceOverview; Relationships: [] };
+      trips_overview: { Row: TripOverview; Relationships: [] };
     };
     Functions: {
       check_invite: { Args: { p_code: string }; Returns: boolean };
       is_member: { Args: Record<string, never>; Returns: boolean };
+      is_admin: { Args: Record<string, never>; Returns: boolean };
       redeem_invite: { Args: { p_code?: string | null }; Returns: Profile };
+      can_see_trip: { Args: { p_trip: string }; Returns: boolean };
+      can_see_place: { Args: { p_place: string }; Returns: boolean };
     };
     Enums: {
       place_category: PlaceCategory;
@@ -178,3 +193,8 @@ export const CATEGORIES: Record<PlaceCategory, { label: string; emoji: string; c
 };
 
 export const PRICE_LABELS = ["", "$", "$$", "$$$", "$$$$"];
+
+/** Categoría principal de un lugar (la primera), con fallback. */
+export function mainCategory(cats: PlaceCategory[]): PlaceCategory {
+  return cats[0] ?? "otro";
+}
