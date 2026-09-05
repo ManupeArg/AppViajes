@@ -45,6 +45,10 @@ export function PlaceMap({ places, me, selectedId, onSelect }: Props) {
   const clusterRef = useRef<Supercluster<PointProps> | null>(null);
   const placesRef = useRef(places);
   useEffect(() => { placesRef.current = places; }, [places]);
+  // Ubicación del usuario al abrir: mientras se resuelve, no encuadramos los lugares.
+  const locateRef = useRef<"pending" | "ok" | "failed">("pending");
+  const lastFitKeyRef = useRef<string>("");
+  const initialSelectedRef = useRef(selectedId); // link compartido: ir al lugar, no a mi ubicación
 
   // Inicialización
   useEffect(() => {
@@ -57,17 +61,38 @@ export function PlaceMap({ places, me, selectedId, onSelect }: Props) {
       attributionControl: { compact: true },
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
-    map.addControl(
-      new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: false }),
-      "top-right",
-    );
+    const geolocate = new maplibregl.GeolocateControl({
+      positionOptions: { enableHighAccuracy: true, timeout: 8000, maximumAge: 60_000 },
+      fitBoundsOptions: { maxZoom: 13 },
+      trackUserLocation: false,
+      showUserLocation: true,
+    });
+    map.addControl(geolocate, "top-right");
     mapRef.current = map;
 
     const render = () => renderMarkers(map, markersRef.current, clusterRef.current, onSelect);
     map.on("moveend", render);
-    map.on("load", render);
+
+    // Al abrir: centrar en la ubicación del usuario. Si falla o no da permiso,
+    // encuadramos los lugares como antes.
+    const fallbackFit = () => {
+      if (locateRef.current !== "pending") return;
+      locateRef.current = "failed";
+      fitPlaces(map, placesRef.current);
+    };
+    geolocate.on("geolocate", () => { locateRef.current = "ok"; });
+    geolocate.on("error", fallbackFit);
+    const fallbackTimer = window.setTimeout(fallbackFit, 9000);
+
+    map.on("load", () => {
+      render();
+      if (initialSelectedRef.current) { locateRef.current = "failed"; window.clearTimeout(fallbackTimer); return; }
+      if (!("geolocation" in navigator)) fallbackFit();
+      else geolocate.trigger();
+    });
 
     return () => {
+      window.clearTimeout(fallbackTimer);
       map.remove();
       mapRef.current = null;
     };
@@ -94,12 +119,13 @@ export function PlaceMap({ places, me, selectedId, onSelect }: Props) {
     );
     clusterRef.current = index;
 
-    // Encuadrar todos los lugares filtrados
-    if (places.length > 0) {
-      const bounds = new maplibregl.LngLatBounds();
-      places.forEach((p) => bounds.extend([p.lng, p.lat]));
-      map.fitBounds(bounds, { padding: 60, maxZoom: 14, duration: 600 });
-    }
+    // Encuadrar los lugares filtrados, pero solo cuando cambia QUÉ lugares se muestran
+    // (filtros, viaje), no en cada refresh de datos, y no mientras esperamos la ubicación inicial.
+    const fitKey = places.map((p) => p.id).sort().join(",");
+    const isFirst = lastFitKeyRef.current === "";
+    const changed = fitKey !== lastFitKeyRef.current;
+    lastFitKeyRef.current = fitKey;
+    if (changed && !(isFirst && locateRef.current === "pending")) fitPlaces(map, places);
 
     if (map.loaded()) renderMarkers(map, markersRef.current, index, onSelect);
   }, [places, me, onSelect]);
@@ -113,6 +139,13 @@ export function PlaceMap({ places, me, selectedId, onSelect }: Props) {
   }, [selectedId]);
 
   return <div ref={containerRef} className="h-full w-full" />;
+}
+
+function fitPlaces(map: maplibregl.Map, places: PlaceOverview[]) {
+  if (places.length === 0) return;
+  const bounds = new maplibregl.LngLatBounds();
+  places.forEach((p) => bounds.extend([p.lng, p.lat]));
+  map.fitBounds(bounds, { padding: 60, maxZoom: 14, duration: 600 });
 }
 
 function renderMarkers(
