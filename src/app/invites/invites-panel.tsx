@@ -30,7 +30,7 @@ export function InvitesPanel({ invites }: { invites: Invite[] }) {
   async function copy(code: string) {
     const url = `${window.location.origin}/invite/${code}`;
     if (navigator.share) {
-      await navigator.share({ title: "Mapa de amigos", text: "Entrá a nuestro mapa de lugares:", url }).catch(() => {});
+      await navigator.share({ title: "MApp", text: "Entrá a nuestro mapa de lugares:", url }).catch(() => {});
     } else {
       await navigator.clipboard.writeText(url);
       setCopied(code);

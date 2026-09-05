@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { Avatar } from "@/components/avatars";
-import { CATEGORIES, mainCategory } from "@/lib/types";
+import { placeEmoji } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -19,12 +19,14 @@ export default async function FeedPage() {
   const ids = (k: "user_id" | "place_id" | "visit_id" | "trip_id") =>
     [...new Set(activity.map((a) => a[k]).filter((x): x is string => !!x))];
 
-  const [{ data: profiles }, { data: places }, { data: visits }, { data: trips }] = await Promise.all([
+  const [{ data: profiles }, { data: places }, { data: visits }, { data: trips }, { data: customs }] = await Promise.all([
     supabase.from("profiles").select("*").in("id", ids("user_id").length ? ids("user_id") : NONE),
     supabase.from("places").select("id,name,categories,city").in("id", ids("place_id").length ? ids("place_id") : NONE),
     supabase.from("visits").select("id,place_id,rating,review").in("id", ids("visit_id").length ? ids("visit_id") : NONE),
     supabase.from("trips").select("id,name,emoji,is_public").in("id", ids("trip_id").length ? ids("trip_id") : NONE),
+    supabase.from("custom_categories").select("*"),
   ]);
+  const cc = customs ?? [];
 
   const prof = new Map((profiles ?? []).map((p) => [p.id, p]));
   const place = new Map((places ?? []).map((p) => [p.id, p]));
@@ -62,7 +64,7 @@ export default async function FeedPage() {
             if (!t || !p) return null;
             body = (
               <>
-                agregó <Link href={`/p/${p.id}`} className="font-medium underline">{CATEGORIES[mainCategory(p.categories)].emoji} {p.name}</Link>
+                agregó <Link href={`/p/${p.id}`} className="font-medium underline">{placeEmoji(p.categories, cc)} {p.name}</Link>
                 {" "}al viaje <Link href={`/?trip=${t.id}`} className="font-medium underline">{t.emoji} {t.name}</Link>{!t.is_public && " 🔒"}
               </>
             );
@@ -71,7 +73,7 @@ export default async function FeedPage() {
             const verb = { place_added: "agregó", visit: "fue a", wishlist: "quiere ir a", comment: "comentó en", photo: "subió una foto de" }[a.kind];
             body = (
               <>
-                {verb} <Link href={`/p/${p.id}`} className="font-medium underline">{CATEGORIES[mainCategory(p.categories)].emoji} {p.name}</Link>
+                {verb} <Link href={`/p/${p.id}`} className="font-medium underline">{placeEmoji(p.categories, cc)} {p.name}</Link>
                 {p.city && <span className="text-zinc-500"> · {p.city}</span>}
               </>
             );

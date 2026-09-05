@@ -1,7 +1,7 @@
 // Service worker mínimo: cachea el shell y los tiles del mapa para que la app
 // abra rápido y el mapa se vea (parcialmente) sin señal. Los datos siempre van
 // a Supabase en vivo.
-const CACHE = "mapa-amigos-v1";
+const CACHE = "mapp-v2";
 const TILE_HOSTS = ["tile.openstreetmap.org", "api.maptiler.com"];
 
 self.addEventListener("install", () => {

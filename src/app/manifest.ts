@@ -2,9 +2,9 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Mapa de amigos",
-    short_name: "Mapa",
-    description: "Nuestros lugares en el mundo",
+    name: "MApp",
+    short_name: "MApp",
+    description: "Los lugares de nuestro grupo, en un mapa",
     start_url: "/",
     display: "standalone",
     background_color: "#fafafa",

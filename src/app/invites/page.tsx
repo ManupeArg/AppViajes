@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { InvitesPanel } from "./invites-panel";
+import { BackfillRegions } from "./backfill-regions";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,7 @@ export default async function InvitesPage() {
       </div>
       <p className="mb-4 text-sm text-zinc-500">Generá un link y mandáselo. Cada código sirve una vez (o las veces que elijas) y vence a los 7 días.</p>
       <InvitesPanel invites={invites ?? []} />
+      <BackfillRegions />
     </main>
   );
 }

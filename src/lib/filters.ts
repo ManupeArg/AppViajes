@@ -5,7 +5,7 @@ export type SortKey = "rating" | "price" | "newest" | "visits" | "name";
 export interface Filters {
   q: string;
   country: string;
-  city: string;
+  region: string;   // provincia / región
   category: PlaceCategory | "";
   minRating: number;       // 0 = sin filtro
   maxPrice: number;        // 0 = sin filtro, 1..4
@@ -17,7 +17,7 @@ export interface Filters {
 }
 
 export const DEFAULT_FILTERS: Filters = {
-  q: "", country: "", city: "", category: "", minRating: 0, maxPrice: 0,
+  q: "", country: "", region: "", category: "", minRating: 0, maxPrice: 0,
   user: "", trip: "", onlyWishlist: false, onlyVisited: false, sort: "newest",
 };
 
@@ -25,7 +25,7 @@ export function filtersFromParams(sp: URLSearchParams): Filters {
   return {
     q: sp.get("q") ?? "",
     country: sp.get("country") ?? "",
-    city: sp.get("city") ?? "",
+    region: sp.get("region") ?? "",
     category: (sp.get("cat") as PlaceCategory) ?? "",
     minRating: Number(sp.get("rating") ?? 0),
     maxPrice: Number(sp.get("price") ?? 0),
@@ -41,7 +41,7 @@ export function filtersToParams(f: Filters): URLSearchParams {
   const sp = new URLSearchParams();
   if (f.q) sp.set("q", f.q);
   if (f.country) sp.set("country", f.country);
-  if (f.city) sp.set("city", f.city);
+  if (f.region) sp.set("region", f.region);
   if (f.category) sp.set("cat", f.category);
   if (f.minRating) sp.set("rating", String(f.minRating));
   if (f.maxPrice) sp.set("price", String(f.maxPrice));
@@ -56,9 +56,9 @@ export function filtersToParams(f: Filters): URLSearchParams {
 export function applyFilters(places: PlaceOverview[], f: Filters, me: string): PlaceOverview[] {
   const q = f.q.trim().toLowerCase();
   let out = places.filter((p) => {
-    if (q && !`${p.name} ${p.city ?? ""} ${p.country ?? ""} ${p.notes ?? ""} ${p.tags.join(" ")}`.toLowerCase().includes(q)) return false;
+    if (q && !`${p.name} ${p.city ?? ""} ${p.region ?? ""} ${p.country ?? ""} ${p.notes ?? ""} ${p.tags.join(" ")} ${p.categories.join(" ")}`.toLowerCase().includes(q)) return false;
     if (f.country && p.country !== f.country) return false;
-    if (f.city && p.city !== f.city) return false;
+    if (f.region && p.region !== f.region) return false;
     if (f.category && !p.categories.includes(f.category)) return false;
     if (f.minRating && (p.avg_rating ?? 0) < f.minRating) return false;
     if (f.maxPrice && (p.price_level ?? 0) > f.maxPrice) return false;

@@ -1,17 +1,18 @@
 "use client";
 
-import type { PlaceOverview, Profile } from "@/lib/types";
-import { CATEGORIES, PRICE_LABELS, mainCategory } from "@/lib/types";
+import type { CustomCategory, PlaceOverview, Profile } from "@/lib/types";
+import { PRICE_LABELS, placeEmoji, categoryLabels } from "@/lib/types";
 import { Avatars } from "./avatars";
 
 interface Props {
   places: PlaceOverview[];
   profiles: Profile[];
+  customs: CustomCategory[];
   me: string;
   onSelect: (id: string) => void;
 }
 
-export function PlaceList({ places, profiles, me, onSelect }: Props) {
+export function PlaceList({ places, profiles, customs, me, onSelect }: Props) {
   if (places.length === 0) {
     return <div className="grid h-full place-items-center p-8 text-center text-sm text-zinc-500">Nada por acá. Probá con otros filtros o agregá un lugar.</div>;
   }
@@ -19,8 +20,8 @@ export function PlaceList({ places, profiles, me, onSelect }: Props) {
   return (
     <ul className="mx-auto max-w-3xl divide-y divide-zinc-200 overflow-y-auto dark:divide-zinc-800">
       {places.map((p) => {
-        const cat = CATEGORIES[mainCategory(p.categories)];
-        const catLabels = p.categories.map((c) => CATEGORIES[c].label).join(" · ") || cat.label;
+        const emoji = placeEmoji(p.categories, customs);
+        const catLabels = categoryLabels(p.categories, customs);
         const visited = p.visitor_ids.includes(me);
         const wished = p.wishlist_ids.includes(me);
         return (
@@ -30,7 +31,7 @@ export function PlaceList({ places, profiles, me, onSelect }: Props) {
                 className="grid size-10 shrink-0 place-items-center rounded-full text-lg"
                 style={{ background: `${p.created_by_color}22`, border: `2px solid ${p.created_by_color}` }}
               >
-                {cat.emoji}
+                {emoji}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
@@ -39,7 +40,7 @@ export function PlaceList({ places, profiles, me, onSelect }: Props) {
                   {wished && !visited && <span title="Quiero ir">⭐</span>}
                 </div>
                 <div className="truncate text-sm text-zinc-500">
-                  {[p.city, p.country].filter(Boolean).join(", ")} · {catLabels}
+                  {[p.city, p.region && p.region !== p.city ? p.region : null, p.country].filter(Boolean).join(", ")} · {catLabels}
                   {p.price_level ? ` · ${PRICE_LABELS[p.price_level]}` : ""}
                 </div>
                 <div className="mt-1 flex items-center gap-2 text-xs text-zinc-500">

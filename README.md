@@ -1,4 +1,4 @@
-# 🗺️ Mapa de amigos
+# 🗺️ MApp
 
 Web privada para un grupo de amigos: mapa mundial de lugares (comida, bebida, súper, atracciones…) con precio, puntaje, reseñas, "fui" / "quiero ir", viajes, feed de actividad y acceso solo por invitación.
 

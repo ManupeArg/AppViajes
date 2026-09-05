@@ -3,14 +3,18 @@
 import { useEffect, useRef } from "react";
 import * as maplibregl from "maplibre-gl";
 import Supercluster from "supercluster";
-import type { PlaceOverview } from "@/lib/types";
-import { CATEGORIES, mainCategory } from "@/lib/types";
+import type { CustomCategory, PlaceOverview } from "@/lib/types";
+import { categoryInfo, placeEmoji } from "@/lib/types";
+import { categoryFromPoi, reverseGeocode, type PlaceResult } from "@/lib/places-search";
 
 interface Props {
   places: PlaceOverview[];
+  customs: CustomCategory[];
   me: string;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  /** El usuario tocó un punto del mapa (o un lugar dibujado) y quiere agregarlo. */
+  onAddAt: (preset: PlaceResult) => void;
 }
 
 // Estilo del mapa base. Con MapTiler se ve mucho mejor; sin key cae a OSM crudo.
@@ -35,10 +39,12 @@ function mapStyle(): string | maplibregl.StyleSpecification {
 // tiles vectoriales), y sin worker el mapa queda vacío. Lo servimos desde /public.
 // Los archivos se copian ahí en `npm install` (scripts/copy-maplibre-worker.mjs).
 maplibregl.setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
+// Arrancar el worker apenas carga este módulo, en paralelo con lo demás.
+if (typeof window !== "undefined") maplibregl.prewarm();
 
-type PointProps = { id: string; category: PlaceOverview["categories"][number]; color: string; wish: boolean };
+type PointProps = { id: string; name: string; emoji: string; color: string; wish: boolean };
 
-export function PlaceMap({ places, me, selectedId, onSelect }: Props) {
+export function PlaceMap({ places, customs, me, selectedId, onSelect, onAddAt }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
@@ -49,6 +55,8 @@ export function PlaceMap({ places, me, selectedId, onSelect }: Props) {
   const locateRef = useRef<"pending" | "ok" | "failed">("pending");
   const lastFitKeyRef = useRef<string>("");
   const initialSelectedRef = useRef(selectedId); // link compartido: ir al lugar, no a mi ubicación
+  const onAddAtRef = useRef(onAddAt);
+  useEffect(() => { onAddAtRef.current = onAddAt; }, [onAddAt]);
 
   // Inicialización
   useEffect(() => {
@@ -59,6 +67,9 @@ export function PlaceMap({ places, me, selectedId, onSelect }: Props) {
       center: [-58.38, -34.6], // Buenos Aires por defecto
       zoom: 2,
       attributionControl: { compact: true },
+      fadeDuration: 0,            // los tiles aparecen sin fundido: se siente más rápido
+      refreshExpiredTiles: false, // no re-pedir tiles que ya tenemos
+      maxTileCacheSize: 400,
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     const geolocate = new maplibregl.GeolocateControl({
@@ -86,6 +97,7 @@ export function PlaceMap({ places, me, selectedId, onSelect }: Props) {
 
     map.on("load", () => {
       render();
+      setupPickOnMap(map, (preset) => onAddAtRef.current(preset));
       if (initialSelectedRef.current) { locateRef.current = "failed"; window.clearTimeout(fallbackTimer); return; }
       if (!("geolocation" in navigator)) fallbackFit();
       else geolocate.trigger();
@@ -111,7 +123,8 @@ export function PlaceMap({ places, me, selectedId, onSelect }: Props) {
         geometry: { type: "Point", coordinates: [p.lng, p.lat] },
         properties: {
           id: p.id,
-          category: mainCategory(p.categories),
+          name: p.name,
+          emoji: placeEmoji(p.categories, customs),
           color: p.created_by_color,
           wish: !p.visitor_ids.length && p.wishlist_ids.includes(me),
         },
@@ -128,7 +141,7 @@ export function PlaceMap({ places, me, selectedId, onSelect }: Props) {
     if (changed && !(isFirst && locateRef.current === "pending")) fitPlaces(map, places);
 
     if (map.loaded()) renderMarkers(map, markersRef.current, index, onSelect);
-  }, [places, me, onSelect]);
+  }, [places, customs, me, onSelect]);
 
   // Centrar en el seleccionado
   useEffect(() => {
@@ -139,6 +152,75 @@ export function PlaceMap({ places, me, selectedId, onSelect }: Props) {
   }, [selectedId]);
 
   return <div ref={containerRef} className="h-full w-full" />;
+}
+
+// ---------------------------------------------------------------------------
+// Tocar el mapa para agregar: si hay un POI dibujado (bar, hospital, estación…)
+// lo tomamos con nombre y tipo; si no, geocodificamos el punto.
+// ---------------------------------------------------------------------------
+function setupPickOnMap(map: maplibregl.Map, onPick: (preset: PlaceResult) => void) {
+  const poiLayers = (map.getStyle().layers ?? [])
+    .filter((l) => "source-layer" in l && l["source-layer"] === "poi")
+    .map((l) => l.id);
+
+  let popup: maplibregl.Popup | null = null;
+
+  const showPopup = (lngLat: maplibregl.LngLatLike, title: string, subtitle: string, preset: () => Promise<PlaceResult>) => {
+    popup?.remove();
+    const el = document.createElement("div");
+    el.className = "pick-popup";
+    el.innerHTML = `<div class="pick-title"></div><div class="pick-sub"></div><button class="pick-btn">+ Agregar este lugar</button>`;
+    (el.querySelector(".pick-title") as HTMLElement).textContent = title;
+    (el.querySelector(".pick-sub") as HTMLElement).textContent = subtitle;
+    const btn = el.querySelector(".pick-btn") as HTMLButtonElement;
+    btn.onclick = async () => {
+      btn.disabled = true;
+      btn.textContent = "Un momento…";
+      const p = await preset();
+      popup?.remove();
+      onPick(p);
+    };
+    popup = new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: "260px", offset: 8 })
+      .setLngLat(lngLat)
+      .setDOMContent(el)
+      .addTo(map);
+  };
+
+  map.on("click", (e) => {
+    // ¿Tocó un POI del mapa base?
+    const feats = poiLayers.length ? map.queryRenderedFeatures(e.point, { layers: poiLayers }) : [];
+    const poi = feats.find((f) => f.geometry.type === "Point" && (f.properties?.name || f.properties?.["name:latin"]));
+    if (poi && poi.geometry.type === "Point") {
+      const [lng, lat] = poi.geometry.coordinates as [number, number];
+      const name = String(poi.properties?.["name:es"] ?? poi.properties?.name ?? poi.properties?.["name:latin"]);
+      const cat = categoryFromPoi(String(poi.properties?.class ?? ""), String(poi.properties?.subclass ?? ""));
+      const info = cat ? categoryInfo(cat) : null;
+      showPopup([lng, lat], name, info ? `${info.emoji} ${info.label}` : "Lugar del mapa", async () => {
+        const geo = await reverseGeocode(lat, lng);
+        return { name, lat, lng, ...geo, price_level: null, google_place_id: null, website: null, categories: cat ? [cat] : [] };
+      });
+      return;
+    }
+
+    // Punto cualquiera
+    const { lng, lat } = e.lngLat;
+    showPopup([lng, lat], "Agregar un lugar acá", "Buscando la dirección…", async () => {
+      const geo = await reverseGeocode(lat, lng);
+      return { name: "", lat, lng, ...geo, price_level: null, google_place_id: null, website: null, categories: [] };
+    });
+    // Completar la dirección en el popup mientras el usuario decide
+    reverseGeocode(lat, lng).then((geo) => {
+      const sub = popup?.getElement()?.querySelector(".pick-sub");
+      if (sub) sub.textContent = geo.address ?? "Sin dirección conocida";
+    });
+  });
+
+  if (poiLayers.length) {
+    map.on("mousemove", (e) => {
+      const hit = map.queryRenderedFeatures(e.point, { layers: poiLayers }).length > 0;
+      map.getCanvas().style.cursor = hit ? "pointer" : "";
+    });
+  }
 }
 
 function fitPlaces(map: maplibregl.Map, places: PlaceOverview[]) {
@@ -177,14 +259,20 @@ function renderMarkers(
       el.className = "cluster";
       el.style.width = el.style.height = `${size}px`;
       el.textContent = String(n);
-      el.onclick = () => {
+      el.onclick = (e) => {
+        e.stopPropagation();
         const zoom = index.getClusterExpansionZoom(props.cluster_id!);
         map.easeTo({ center: [lng, lat], zoom, duration: 400 });
       };
     } else {
-      el.className = `marker${props.wish ? " wish" : ""}`;
-      el.style.background = props.color;
-      el.innerHTML = `<span>${CATEGORIES[props.category].emoji}</span>`;
+      // Envoltorio sin rotar (para el tooltip con el nombre) + pin rotado adentro
+      el.className = "marker-wrap tip tip-up";
+      el.dataset.tip = props.name;
+      const pin = document.createElement("div");
+      pin.className = `marker${props.wish ? " wish" : ""}`;
+      pin.style.background = props.color;
+      pin.innerHTML = `<span>${props.emoji}</span>`;
+      el.appendChild(pin);
       el.onclick = (e) => {
         e.stopPropagation();
         onSelect(props.id);

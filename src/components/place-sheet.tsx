@@ -2,10 +2,10 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { X, Navigation, Share2, Star, Trash2, Plane } from "lucide-react";
+import { X, Navigation, Share2, Star, Trash2, Plane, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import type { PlaceOverview, Profile, TripOverview, Visit } from "@/lib/types";
-import { CATEGORIES, PRICE_LABELS, mainCategory } from "@/lib/types";
+import type { CustomCategory, PlaceOverview, Profile, TripOverview, Visit } from "@/lib/types";
+import { PRICE_LABELS, placeEmoji, categoryLabels } from "@/lib/types";
 import { Avatar, Avatars } from "./avatars";
 import { VisitForm } from "./visit-form";
 
@@ -13,19 +13,24 @@ interface Props {
   place: PlaceOverview;
   profiles: Profile[];
   trips: TripOverview[];
+  customs: CustomCategory[];
   me: string;
   onClose: () => void;
+  onEdit: (place: PlaceOverview) => void;
 }
 
-export function PlaceSheet({ place, profiles, trips, me, onClose }: Props) {
+export function PlaceSheet({ place, profiles, trips, customs, me, onClose, onEdit }: Props) {
   const supabase = createClient();
   const router = useRouter();
   const [, start] = useTransition();
   const [visits, setVisits] = useState<Visit[]>([]);
   const [showVisitForm, setShowVisitForm] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const cat = CATEGORIES[mainCategory(place.categories)];
-  const catLabels = place.categories.map((c) => `${CATEGORIES[c].emoji} ${CATEGORIES[c].label}`).join(" · ") || cat.label;
+  const emoji = placeEmoji(place.categories, customs);
+  const catLabels = categoryLabels(place.categories, customs, true);
+  const isOwner = place.created_by === me;
+  // Solo puedo agregar a viajes donde soy creador o miembro
+  const myTrips = trips.filter((t) => t.created_by === me || t.member_ids.includes(me));
   const visited = place.visitor_ids.includes(me);
   // "Quiero ir" optimista: el botón cambia al instante; cuando el servidor confirma
   // (y el valor real cambia), el override deja de aplicar solo.
@@ -84,7 +89,7 @@ export function PlaceSheet({ place, profiles, trips, me, onClose }: Props) {
 
   async function share() {
     const url = `${window.location.origin}/p/${place.id}`;
-    const data = { title: place.name, text: `${cat.emoji} ${place.name} — ${[place.city, place.country].filter(Boolean).join(", ")}`, url };
+    const data = { title: place.name, text: `${emoji} ${place.name} — ${[place.city, place.country].filter(Boolean).join(", ")}`, url };
     if (navigator.share) await navigator.share(data).catch(() => {});
     else {
       await navigator.clipboard.writeText(url);
@@ -98,7 +103,7 @@ export function PlaceSheet({ place, profiles, trips, me, onClose }: Props) {
     <aside className="absolute inset-x-0 bottom-0 z-20 max-h-[85%] overflow-y-auto rounded-t-2xl border-t border-zinc-200 bg-white shadow-2xl sm:inset-y-0 sm:left-auto sm:right-0 sm:max-h-none sm:w-[400px] sm:rounded-none sm:border-l sm:border-t-0 dark:border-zinc-800 dark:bg-zinc-900">
       <div className="sticky top-0 flex items-start gap-3 border-b border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
         <div className="grid size-12 shrink-0 place-items-center rounded-full text-2xl" style={{ background: `${place.created_by_color}22`, border: `2px solid ${place.created_by_color}` }}>
-          {cat.emoji}
+          {emoji}
         </div>
         <div className="min-w-0 flex-1">
           <h2 className="text-lg font-semibold leading-tight">{place.name}</h2>
@@ -110,6 +115,9 @@ export function PlaceSheet({ place, profiles, trips, me, onClose }: Props) {
             {place.avg_rating != null && <> · <b className="text-zinc-900 dark:text-zinc-100">★ {place.avg_rating}</b></>}
           </p>
         </div>
+        {isOwner && (
+          <button onClick={() => onEdit(place)} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800" aria-label="Editar" title="Editar nombre, categorías, notas y tags"><Pencil size={16} /></button>
+        )}
         <button onClick={onClose} className="rounded-lg p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800" aria-label="Cerrar"><X size={18} /></button>
       </div>
 
@@ -186,10 +194,10 @@ export function PlaceSheet({ place, profiles, trips, me, onClose }: Props) {
               <span className="text-zinc-500">En ningún viaje</span>
             )}
           </div>
-          {trips.some((t) => !place.trip_ids.includes(t.id)) && (
+          {myTrips.some((t) => !place.trip_ids.includes(t.id)) && (
             <select onChange={(e) => addToTrip(e.target.value)} value="" className="w-full rounded-lg border border-zinc-200 bg-transparent px-2 py-1.5 text-sm dark:border-zinc-700">
               <option value="">+ Agregar a un viaje…</option>
-              {trips.filter((t) => !place.trip_ids.includes(t.id)).map((t) => <option key={t.id} value={t.id}>{t.emoji} {t.name}{t.is_public ? "" : " 🔒"}</option>)}
+              {myTrips.filter((t) => !place.trip_ids.includes(t.id)).map((t) => <option key={t.id} value={t.id}>{t.emoji} {t.name}{t.is_public ? "" : " 🔒"}</option>)}
             </select>
           )}
         </section>
@@ -216,7 +224,7 @@ export function PlaceSheet({ place, profiles, trips, me, onClose }: Props) {
           })}
         </section>
 
-        {place.created_by === me && (
+        {isOwner && (
           <button onClick={removePlace} className="flex items-center gap-1 text-xs text-red-600"><Trash2 size={12} /> Borrar lugar</button>
         )}
       </div>

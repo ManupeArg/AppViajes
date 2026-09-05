@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
-import type { PlaceOverview, Profile, Trip } from "@/lib/types";
+import type { CustomCategory, PlaceOverview, Profile } from "@/lib/types";
 import { CATEGORIES, PRICE_LABELS } from "@/lib/types";
 import { DEFAULT_FILTERS, uniqueSorted, type Filters, type SortKey } from "@/lib/filters";
 
@@ -10,7 +11,7 @@ interface Props {
   onChange: (f: Filters) => void;
   places: PlaceOverview[];
   profiles: Profile[];
-  trips: Trip[];
+  customs: CustomCategory[];
   count: number;
 }
 
@@ -25,13 +26,39 @@ const SORTS: { key: SortKey; label: string }[] = [
 const select =
   "rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900";
 
-export function FilterBar({ filters, onChange, places, profiles, count }: Props) {
+export function FilterBar({ filters, onChange, places, profiles, customs, count }: Props) {
   const countries = uniqueSorted(places.map((p) => p.country));
-  const cities = uniqueSorted(
-    places.filter((p) => !filters.country || p.country === filters.country).map((p) => p.city),
+  const regions = uniqueSorted(
+    places.filter((p) => !filters.country || p.country === filters.country).map((p) => p.region),
   );
   const isDirty = JSON.stringify({ ...filters, sort: "newest", trip: "" }) !== JSON.stringify({ ...DEFAULT_FILTERS, trip: "" });
   const set = <K extends keyof Filters>(k: K, v: Filters[K]) => onChange({ ...filters, [k]: v });
+
+  // El texto de búsqueda se escribe localmente y se aplica con una pausa de 400 ms,
+  // para no recargar en cada tecla.
+  const [q, setQ] = useState(filters.q);
+  const qTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const filtersRef = useRef(filters);
+  useEffect(() => { filtersRef.current = filters; }, [filters]);
+  useEffect(() => {
+    // Si el filtro cambió desde afuera (p. ej. "limpiar"), sincronizamos el input
+    if (filters.q !== q && !qTimer.current) setQ(filters.q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.q]);
+  const onQ = (value: string) => {
+    setQ(value);
+    if (qTimer.current) clearTimeout(qTimer.current);
+    qTimer.current = setTimeout(() => {
+      qTimer.current = null;
+      onChange({ ...filtersRef.current, q: value });
+    }, 400);
+  };
+
+  // Categorías usadas por algún lugar + predefinidas + del grupo, sin repetir
+  const catOptions = [
+    ...Object.entries(CATEGORIES).map(([k, v]) => ({ value: k, label: `${v.emoji} ${v.label}` })),
+    ...customs.map((c) => ({ value: c.name, label: `${c.emoji ?? "📍"} ${c.name}` })),
+  ];
 
   return (
     <div className="flex items-center border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
@@ -39,26 +66,26 @@ export function FilterBar({ filters, onChange, places, profiles, count }: Props)
       <div className="relative shrink-0">
         <Search size={14} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-zinc-400" />
         <input
-          value={filters.q}
-          onChange={(e) => set("q", e.target.value)}
-          placeholder="Buscar…"
-          className={`${select} w-36 pl-7`}
+          value={q}
+          onChange={(e) => onQ(e.target.value)}
+          placeholder="Buscar nombre, tag, ciudad…"
+          className={`${select} w-44 pl-7`}
         />
       </div>
 
-      <select value={filters.country} onChange={(e) => onChange({ ...filters, country: e.target.value, city: "" })} className={select}>
+      <select value={filters.country} onChange={(e) => onChange({ ...filters, country: e.target.value, region: "" })} className={select}>
         <option value="">País</option>
         {countries.map((c) => <option key={c}>{c}</option>)}
       </select>
 
-      <select value={filters.city} onChange={(e) => set("city", e.target.value)} className={select}>
-        <option value="">Ciudad</option>
-        {cities.map((c) => <option key={c}>{c}</option>)}
+      <select value={filters.region} onChange={(e) => set("region", e.target.value)} className={select}>
+        <option value="">Provincia / Región</option>
+        {regions.map((c) => <option key={c}>{c}</option>)}
       </select>
 
-      <select value={filters.category} onChange={(e) => set("category", e.target.value as Filters["category"])} className={select}>
+      <select value={filters.category} onChange={(e) => set("category", e.target.value)} className={select}>
         <option value="">Categoría</option>
-        {Object.entries(CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v.emoji} {v.label}</option>)}
+        {catOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
 
       <select value={filters.maxPrice} onChange={(e) => set("maxPrice", Number(e.target.value))} className={select}>
@@ -94,7 +121,7 @@ export function FilterBar({ filters, onChange, places, profiles, count }: Props)
       </select>
 
       {isDirty && (
-        <button onClick={() => onChange({ ...DEFAULT_FILTERS, trip: filters.trip })} className="shrink-0 rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800" aria-label="Limpiar filtros">
+        <button onClick={() => { setQ(""); onChange({ ...DEFAULT_FILTERS, trip: filters.trip }); }} className="shrink-0 rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800" aria-label="Limpiar filtros">
           <X size={16} />
         </button>
       )}

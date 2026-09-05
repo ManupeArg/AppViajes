@@ -10,7 +10,23 @@ body {
   overscroll-behavior: none;
 }
 
+/* Tooltip genérico: <el class="tip" data-tip="Texto"> */
+.tip { position: relative; }
+.tip::after {
+  content: attr(data-tip);
+  position: absolute; left: 50%; top: calc(100% + 6px); transform: translateX(-50%);
+  background: #18181b; color: #fff; font-size: 12px; line-height: 1.2; font-weight: 500;
+  padding: 4px 8px; border-radius: 6px; white-space: nowrap;
+  opacity: 0; pointer-events: none; transition: opacity .12s; z-index: 40;
+  box-shadow: 0 2px 8px rgb(0 0 0 / .25);
+}
+.tip:hover::after, .tip:focus-visible::after { opacity: 1; }
+.tip-up::after { top: auto; bottom: calc(100% + 6px); }
+
 /* Marcadores del mapa */
+/* El marcador lo posiciona MapLibre (absolute); el tooltip se ancla igual */
+.maplibregl-marker.marker-wrap.tip { position: absolute; }
+.marker-wrap.tip::after { z-index: 5; }
 .marker {
   width: 34px;
   height: 34px;
@@ -45,3 +61,11 @@ body {
   padding: 0;
   overflow: hidden;
 }
+
+/* Popup "agregar acá" */
+.pick-popup { padding: 10px 12px; font: 13px/1.35 var(--font-sans); color: #18181b; min-width: 180px; }
+.pick-title { font-weight: 600; margin-bottom: 2px; padding-right: 14px; }
+.pick-sub { color: #71717a; font-size: 12px; margin-bottom: 8px; }
+.pick-btn { width: 100%; background: #18181b; color: white; border: 0; border-radius: 8px; padding: 7px 10px; font-weight: 500; cursor: pointer; }
+.pick-btn:disabled { opacity: 0.6; }
+.maplibregl-popup-close-button { font-size: 18px; padding: 2px 6px; color: #71717a; }
